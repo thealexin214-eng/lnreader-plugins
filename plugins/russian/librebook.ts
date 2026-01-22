@@ -60,76 +60,94 @@ class LibreBook implements Plugin.PluginBase {
     return novels;
   }
 
-  async parseNovel(novelPath: string): Promise<Plugin.SourceNovel> {
-    const url = this.site + novelPath;
-    const body = await fetchText(url);
-    const loadedCheerio = parseHTML(body);
+async parseNovel(novelPath: string): Promise<Plugin.SourceNovel> {
+  const url = this.site + novelPath;
+  const body = await fetchText(url);
+  const loadedCheerio = parseHTML(body);
 
-    const novel: Plugin.SourceNovel = {
-      path: novelPath,
-      name: '',
-      chapters: [],
-    };
+  const novel: Plugin.SourceNovel = {
+    path: novelPath,
+    name: '',
+    chapters: [],
+  };
 
-    novel.name = loadedCheerio('h1').first().text().trim()
-      .replace('Электронная книга Другие имена', '')
-      .split('|')[0]
-      .trim();
+  novel.name = loadedCheerio('h1').first().text().trim()
+    .replace('Электронная книга Другие имена', '')
+    .split('|')[0]
+    .trim();
 
-    if (!novel.name) {
-      novel.name = loadedCheerio('.names .name').first().text().trim();
-    }
-
-    novel.cover = loadedCheerio('.picture-fotorama img').first().attr('src') ||
-                  loadedCheerio('.subject-cover img').attr('src');
-
-    novel.author = loadedCheerio('.elem_author a').first().text().trim();
-
-    const genres: string[] = [];
-    loadedCheerio('.elem_genre a').each((i, el) => {
-      genres.push(loadedCheerio(el).text().trim());
-    });
-    novel.genres = genres.join(', ');
-
-    novel.summary = loadedCheerio('.manga-description').text().trim() ||
-                    loadedCheerio('#tab-description').text().trim();
-
-    const statusText = loadedCheerio('.subject-meta').text().toLowerCase();
-    if (statusText.includes('завершен') || statusText.includes('выпуск завершен')) {
-      novel.status = NovelStatus.Completed;
-    } else if (statusText.includes('продолжается') || statusText.includes('переводится')) {
-      novel.status = NovelStatus.Ongoing;
-    } else {
-      novel.status = NovelStatus.Unknown;
-    }
-
-    // Fetch chapters from the first chapter page (chapters are listed there)
-    const firstChapterUrl = this.site + novelPath + '/vol1/1?mtr=true';
-    const chapterBody = await fetchText(firstChapterUrl);
-    const chapterCheerio = parseHTML(chapterBody);
-
-    const chapters: Plugin.ChapterItem[] = [];
-
-    chapterCheerio('table tr').each((i, el) => {
-      const chapterLink = chapterCheerio(el).find('a');
-      const chapterPath = chapterLink.attr('href');
-      const chapterName = chapterLink.text().trim();
-      const releaseDate = chapterCheerio(el).find('td').last().text().trim();
-
-      if (chapterPath && chapterName) {
-        chapters.push({
-          name: chapterName,
-          path: chapterPath.replace('?mtr=true', ''),
-          releaseTime: releaseDate,
-          chapterNumber: i + 1,
-        });
-      }
-    });
-
-    novel.chapters = chapters;
-
-    return novel;
+  if (!novel.name) {
+    novel.name = loadedCheerio('.names .name').first().text().trim();
   }
+
+  novel.cover = loadedCheerio('.picture-fotorama img').first().attr('src') ||
+                loadedCheerio('.subject-cover img').attr('src');
+
+  novel.author = loadedCheerio('.elem_author a').first().text().trim();
+
+  const genres: string[] = [];
+  loadedCheerio('.elem_genre a').each((i, el) => {
+    genres.push(loadedCheerio(el).text().trim());
+  });
+  novel.genres = genres.join(', ');
+
+  novel.summary = loadedCheerio('.manga-description').text().trim() ||
+                  loadedCheerio('#tab-description').text().trim();
+
+  const statusText = loadedCheerio('.subject-meta').text().toLowerCase();
+  if (statusText.includes('завершен') || statusText.includes('выпуск завершен')) {
+    novel.status = NovelStatus.Completed;
+  } else if (statusText.includes('продолжается') || statusText.includes('переводится')) {
+    novel.status = NovelStatus.Ongoing;
+  } else {
+    novel.status = NovelStatus.Unknown;
+  }
+
+  // Парсим оглавление с главной страницы книги
+  const chapters: Plugin.ChapterItem[] = [];
+  
+  // Ищем ссылки на главы в оглавлении на главной странице
+  loadedCheerio('.chapters-list a, .table-of-contents a, #chapters a, .book-contents a').each((i, el) => {
+    const chapterPath = loadedCheerio(el).attr('href');
+    const chapterName = loadedCheerio(el).text().trim();
+
+    if (chapterPath && chapterName && chapterPath.includes('/vol')) {
+      chapters.push({
+        name: chapterName,
+        path: chapterPath.replace('?mtr=true', ''),
+        chapterNumber: i + 1,
+      });
+    }
+  });
+
+  // Если на главной странице нет оглавления, пробуем отдельную страницу оглавления
+  if (chapters.length === 0) {
+    const tocUrl = this.site + novelPath + '/contents';
+    try {
+      const tocBody = await fetchText(tocUrl);
+      const tocCheerio = parseHTML(tocBody);
+      
+      tocCheerio('a').each((i, el) => {
+        const chapterPath = tocCheerio(el).attr('href');
+        const chapterName = tocCheerio(el).text().trim();
+
+        if (chapterPath && chapterName && chapterPath.includes('/vol')) {
+          chapters.push({
+            name: chapterName,
+            path: chapterPath.replace('?mtr=true', ''),
+            chapterNumber: i + 1,
+          });
+        }
+      });
+    } catch (e) {
+      // Страница оглавления не найдена
+    }
+  }
+
+  novel.chapters = chapters;
+
+  return novel;
+}
 
   async parseChapter(chapterPath: string): Promise<string> {
     const url = this.site + chapterPath + '?mtr=true';
