@@ -247,5 +247,5 @@ class LibreBook implements Plugin.PluginBase {
     } as const,
   } satisfies Filters;
 }
-
+ 
 export default new LibreBook();
