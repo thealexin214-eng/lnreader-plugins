@@ -10,6 +10,7 @@ class LibreBook implements Plugin.PluginBase {
   site = 'https://1.librebook.me';
   version = '1.0.0';
   icon = 'src/ru/librebook/icon.png';
+  lang = 'Русский';
 
   async popularNovels(
     pageNo: number,
