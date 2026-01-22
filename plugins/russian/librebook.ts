@@ -8,7 +8,7 @@ class LibreBook implements Plugin.PluginBase {
   id = 'librebook';
   name = 'LibreBook';
   site = 'https://1.librebook.me';
-  version = '1.0.1';
+  version = '1.0.2';
   icon = 'src/ru/librebook/icon.png';
 
   async popularNovels(
@@ -61,8 +61,13 @@ class LibreBook implements Plugin.PluginBase {
       chapters: [],
     };
 
-    // Название - берём из h1 или .names .name
-    novel.name = $('h1.names .name').first().text().trim();
+    // Название - русское название в h1.names span.name
+    novel.name = $('h1.names span.name').first().text().trim();
+    if (!novel.name) {
+      novel.name = $('h1.names').first().contents().filter(function() {
+        return this.nodeType === 3; // text node
+      }).text().trim();
+    }
     if (!novel.name) {
       novel.name = $('h1').first().text().trim().split('|')[0].trim();
     }
@@ -81,8 +86,8 @@ class LibreBook implements Plugin.PluginBase {
     });
     novel.genres = genres.join(', ');
 
-    // Описание
-    novel.summary = $('.manga-description').text().trim();
+    // Описание - берём только первый блок
+    novel.summary = $('.leftContent .manga-description').first().text().trim();
 
     // Статус - смотрим badge в subject-meta
     const statusBadge = $('.subject-meta .badge-info').text().toLowerCase();
